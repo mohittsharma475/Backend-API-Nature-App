@@ -22,6 +22,7 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: [true, "Please provide a password"],
+    select: false,
     minlength: [8, "A password should have at least 8 characters"],
   },
   passwordConfirm: {
@@ -34,6 +35,12 @@ const userSchema = new mongoose.Schema({
       },
       message: "Password did'nt match",
     },
+    passwordChangedAt: Date,
+    role:{
+      type:String,
+      enum:['admin','user','guide','lead-guide'],
+      default:'user',
+    }
   },
 });
 
@@ -41,15 +48,33 @@ const userSchema = new mongoose.Schema({
 // pre middlewaare
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-//   only runs if password actually modified
+  //   only runs if password actually modified
 
   this.password = await bcrypt.hash(this.password, 12);
   // async function
 
   this.passwordConfirm = undefined;
-//   /delete passwordconfirm field
+  //   /delete passwordconfirm field
   next();
 });
+
+userSchema.methods.correctPassword = async function (
+  candidatePassword,
+  userPassword
+) {
+  // this.password not possible becuase not possible because of select property
+  return await bcrypt.compare(candidatePassword, userPassword);
+};
+userSchema.methods.changedPasswordAfterTokenIssued = function(JWTTimestamp){
+  if(this.passwordChangedAt){
+    const changedTimestamp = parseInt(this.passwordChangedAt.getTime()/1000,10);
+
+    return JWTTimestamp < changedTimestamp;  //100 < 200 c
+  }
+  
+  
+  return false;
+}
 
 const User = mongoose.model("User", userSchema);
 
