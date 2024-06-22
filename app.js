@@ -1,12 +1,66 @@
 const express = require("express");
-const cookieParser = require("cookie-parser")
+const morgan = require("morgan");
+const cookieParser = require("cookie-parser");
+const helmet = require("helmet");
+const mongoSanitize = require("express-mongo-sanitize");
+const xss = require("xss-clean");
+const hpp = require("hpp");
+const rateLimit = require("express-rate-limit");
 const tourRouter = require("./Routes/tourRouter");
 const userRouter = require("./Routes/userRouter");
 const AppError = require("./utils/appError");
 
 const app = express();
 
-app.use(express.json());
+//1. GLobal middlemare
+
+//set security http header
+app.use(helmet());
+
+//dev logging
+if (process.env.NODE_ENV === "development") {
+  app.use(morgan("dev"));
+}
+
+//limit requests from same API
+const limiter = rateLimit({
+  max: 3,
+  windowMs: 60 * 60 * 1000, //1hr= 60m *60s*1000ms
+  message: "Too many requests from this IP, please try again in an hour!",
+});
+
+if (process.env.NODE_ENV === "production") {
+  app.use("/api", limiter);
+}
+
+//body parser, reading data from body into req.body
+app.use(express.json({ limit: "10kb" }));
+
+// data sanitization against NOSQL query injection
+app.use(mongoSanitize());
+-(
+  //filter out $sign from body or params
+  // data sanitization XSS
+  app.use(xss())
+);
+-(
+  // clean any user input from malicius html code
+
+  app.use(
+    hpp({
+      whitelist: [
+        "duration",
+        "ratingsQuantity",
+        "ratingsAverage",
+        "maxGroupSize",
+        "difficulty",
+        "price",
+      ],
+    })
+  )
+);
+
+//serving static files
 app.use(express.static(`${__dirname}/public`));
 app.use(cookieParser());
 
